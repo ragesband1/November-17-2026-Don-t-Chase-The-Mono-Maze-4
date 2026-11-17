@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Don’t Chase The Mono Maze</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #111;
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        h1 {
+            margin: 5px 0;
+            font-size: 1.5rem;
+            color: #ff7675;
+            letter-spacing: 2px;
+        }
+        #game-container {
+            position: relative;
+            box-shadow: 0 0 20px rgba(255, 118, 117, 0.4);
+            border: 3px solid #d63031;
+            border-radius: 8px;
+            background: #2d3436;
+        }
+        canvas {
+            display: block;
+            background: #1e272c;
+        }
+        #ui-panel {
+            margin-top: 10px;
+            display: flex;
+            gap: 20px;
+            font-size: 1rem;
+            background: #222;
+            padding: 8px 15px;
+            border-radius: 5px;
+            border: 1px solid #444;
+        }
+        .stat span {
+            color: #00cec9;
+            font-weight: bold;
+        }
+        #instructions {
+            margin-top: 8px;
+            font-size: 0.8rem;
+            color: #b2bec3;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>DON’T CHASE THE MONO MAZE</h1>
+    <div id="game-container">
+        <canvas id="gameCanvas" width="600" height="400"></canvas>
+    </div>
+    
+    <div id="ui-panel">
+        <div class="stat">Level: <span id="lvlVal">1</span></div>
+        <div class="stat">Poly Collected: <span id="polyVal">0</span> / 5</div>
+        <div class="stat">Health: <span id="hpVal">100</span>%</div>
+    </div>
+    
+    <div id="instructions">
+        Controls: <b>W, A, S, D</b> or <b>Arrow Keys</b> to Move. Collect single Poly characters (Blue), avoid Mono enemies (Red)!
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Game variables
+    let score = 0;
+    let level = 1;
+    let polyCount = 0;
+    let targetPoly = 5;
+    let health = 100;
+    let gameOver = false;
+    let gameWon = false;
+
+    // Player (Poly) object
+    let player = {
+        x: 50,
+        y: 50,
+        size: 14,
+        speed: 3.5,
+        color: '#74b9ff'
+    };
+
+    // Controls tracking
+    let keys = {};
+    window.addEventListener('keydown', (e) => keys[e.key.toLowerCase()] = true);
+    window.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
+
+    // Collectibles (Poly People)
+    let polyPeople = [];
+    // Enemies (Mono)
+    let monoEnemies = [];
+
+    function initLevel() {
+        polyPeople = [];
+        monoEnemies = [];
+        polyCount = 0;
+
+        // Spawn Poly Collectibles
+        for (let i = 0; i < targetPoly; i++) {
+            polyPeople.push({
+                x: Math.random() * (canvas.width - 60) + 30,
+                y: Math.random() * (canvas.height - 60) + 30,
+                size: 10,
+                color: '#00cec9',
+                active: true
+            });
+        }
+
+        // Spawn Mono Enemies based on level
+        let enemyCount = Math.min(2 + level, 8);
+        for (let i = 0; i < enemyCount; i++) {
+            monoEnemies.push({
+                x: Math.random() * (canvas.width - 100) + 50,
+                y: Math.random() * (canvas.height - 100) + 50,
+                size: 14,
+                speed: 1.2 + (level * 0.2),
+                color: '#ff7675'
+            });
+        }
+    }
+
+    function update() {
+        if (gameOver || gameWon) return;
+
+        // Player Movement (W, A, S, D or Arrows)
+        if ((keys['w'] || keys['arrowup']) && player.y > player.size) player.y -= player.speed;
+        if ((keys['s'] || keys['arrowdown']) && player.y < canvas.height - player.size) player.y += player.speed;
+        if ((keys['a'] || keys['arrowleft']) && player.x > player.size) player.x -= player.speed;
+        if ((keys['d'] || keys['arrowright']) && player.x < canvas.width - player.size) player.x += player.speed;
+
+        // Check Collisions with Poly People
+        polyPeople.forEach(p => {
+            if (p.active) {
+                let dist = Math.hypot(player.x - p.x, player.y - p.y);
+                if (dist < player.size + p.size) {
+                    p.active = false;
+                    polyCount++;
+                    score += 100;
+                }
+            }
+        });
+
+        // Move and Check Collisions with Mono Enemies
+        monoEnemies.forEach(enemy => {
+            // Simple AI: Move towards player
+            if (enemy.x < player.x) enemy.x += enemy.speed;
+            if (enemy.x > player.x) enemy.x -= enemy.speed;
+            if (enemy.y < player.y) enemy.y += enemy.speed;
+            if (enemy.y > player.y) enemy.y -= enemy.speed;
+
+            // Damage player on contact
+            let dist = Math.hypot(player.x - enemy.x, player.y - enemy.y);
+            if (dist < player.size + enemy.size) {
+                health -= 0.8; // Gradual damage on contact
+                if (health <= 0) {
+                    health = 0;
+                    gameOver = true;
+                }
+            }
+        });
+
+        // Check Level Completion
+        if (polyCount >= targetPoly) {
+            level++;
+            if (level > 4) {
+                gameWon = true;
+            } else {
+                targetPoly += 3;
+                player.x = 50;
+                player.y = 50;
+                initLevel();
+            }
+        }
+
+        // Update UI
+        document.getElementById('lvlVal').innerText = level;
+        document.getElementById('polyVal').innerText = `${polyCount} / ${targetPoly}`;
+        document.getElementById('hpVal').innerText = Math.max(0, Math.floor(health));
+    }
+
+    function draw() {
+        // Clear screen
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw Maze Grid lines (Aesthetic background)
+        ctx.strokeStyle = '#383e42';
+        ctx.lineWidth = 1;
+        for (let x = 0; x < canvas.width; x += 40) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+        }
+        for (let y = 0; y < canvas.height; y += 40) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+        }
+
+        // Draw Poly People
+        polyPeople.forEach(p => {
+            if (p.active) {
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.stroke();
+            }
+        });
+
+        // Draw Mono Enemies
+        monoEnemies.forEach(enemy => {
+            ctx.fillStyle = enemy.color;
+            ctx.fillRect(enemy.x - enemy.size, enemy.y - enemy.size, enemy.size * 2, enemy.size * 2);
+            ctx.strokeStyle = '#d63031';
+            ctx.strokeRect(enemy.x - enemy.size, enemy.y - enemy.size, enemy.size * 2, enemy.size * 2);
+        });
+
+        // Draw Player (Poly)
+        ctx.fillStyle = player.color;
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#0984e3';
+        ctx.stroke();
+
+        // Game Over Screen
+        if (gameOver) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#ff7675';
+            ctx.font = 'bold 28px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('CAUGHT BY MONO! GAME OVER', canvas.width / 2, canvas.height / 2 - 10);
+            ctx.fillStyle = '#fff';
+            ctx.font = '16px sans-serif';
+            ctx.fillText('Refresh page to try again.', canvas.width / 2, canvas.height / 2 + 30);
+        }
+
+        // Game Win Screen
+        if (gameWon) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#00cec9';
+            ctx.font = 'bold 26px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('LONG LIVE POLYAMORY MAZE!', canvas.width / 2, canvas.height / 2 - 15);
+            ctx.fillStyle = '#fff';
+            ctx.font = '16px sans-serif';
+            ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 25);
+        }
+    }
+
+    function mainLoop() {
+        update();
+        draw();
+        requestAnimationFrame(mainLoop);
+    }
+
+    // Initialize and Start Game
+    initLevel();
+    mainLoop();
+</script>
+
+</body>
+</html>
